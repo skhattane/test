@@ -1,0 +1,83 @@
+name: Create and Update JIRA Ticket on PR Event
+
+on:
+  pull_request:
+    types:
+      - opened
+      - assigned
+      - closed
+
+jobs:
+  create-jira-ticket:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check PR creator or assignee
+        id: check_user
+        run: |
+          ALLOWED_USERS=(${{ vars.ALLOWED_USERS }})
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+          ASSIGNEES=($(echo "${{ join(github.event.pull_request.assignees.*.login, ' ') }}"))
+          
+          MATCH=false
+          for user in "${ALLOWED_USERS[@]}"; do
+            if [[ "$PR_AUTHOR" == "$user" ]]; then
+              MATCH=true
+              break
+            fi
+            for assignee in "${ASSIGNEES[@]}"; do
+              if [[ "$assignee" == "$user" ]]; then
+                MATCH=true
+                break 2
+              fi
+            done
+          done
+          echo "MATCH=$MATCH" >> $GITHUB_ENV
+
+      - name: Get active sprint ID
+        if: env.MATCH == 'true'
+        run: |
+          ACTIVE_SPRINT=$(curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            -X GET "${{ secrets.JIRA_BASE_URL }}/rest/agile/1.0/board/${{ secrets.JIRA_BOARD_ID }}/sprint" \
+            | jq -r '.values[] | select(.state=="active") | .id')
+          echo "ACTIVE_SPRINT=$ACTIVE_SPRINT" >> $GITHUB_ENV
+
+      - name: Create JIRA issue
+        if: env.MATCH == 'true' && github.event.action != 'closed'
+        run: |
+          curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            -X POST --data @- -H "Content-Type: application/json" "${{ secrets.JIRA_BASE_URL }}/rest/api/2/issue" <<EOF
+          {
+            "fields": {
+              "project": { "key": "${{ secrets.JIRA_PROJECT_KEY }}" },
+              "summary": "EXT_REQ [PR Review #${{ github.event.pull_request.number }}] ${{ github.event.pull_request.title }}",
+              "description": "Lien PR: ${{ github.event.pull_request.html_url }}",
+              "issuetype": { "name": "Task" },
+              "customfield_10007": "${ACTIVE_SPRINT}",
+              "labels": ${{ vars.JIRA_LABELS }},
+              "components": ${{ vars.JIRA_COMPONENTS }},
+              "customfield_10008": ${{ vars.JIRA_TEAMS }},
+              "parent": { "key": "${{ vars.JIRA_PARENT_TICKET }}" }
+            }
+          }
+          EOF
+
+      - name: Update JIRA issue on PR close
+        if: env.MATCH == 'true' && github.event.action == 'closed'
+        run: |
+          ISSUE_KEY=$(curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            -X GET "${{ secrets.JIRA_BASE_URL }}/rest/api/2/search?jql=summary~'EXT_REQ [PR Review #${{ github.event.pull_request.number }}]'" \
+            | jq -r '.issues[0].key')
+          
+          if [ "$ISSUE_KEY" != "null" ]; then
+            curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+              -X PUT --data @- -H "Content-Type: application/json" "${{ secrets.JIRA_BASE_URL }}/rest/api/2/issue/$ISSUE_KEY" <<EOF
+            {
+              "fields": {
+                "status": { "name": "Done" }
+              }
+            }
+            EOF
+          fi
