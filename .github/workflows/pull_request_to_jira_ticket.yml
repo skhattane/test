@@ -21,4 +21,4 @@ jobs:
         issuetype: Task
         description: Created automatically via GitHub Actions
       env:
-        GITHUB_TOKEN: ${{ secret.TOKEN_GITHUB }}
+        GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
