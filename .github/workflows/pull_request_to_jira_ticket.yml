@@ -1,29 +1,22 @@
-on: push
+name: Jira Ticket
 
-name: Jira Example
+on:
+  pull_request:
+    types: ["open"]
+    branches: ["master"]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Jira Example
     steps:
-    - name: Login
-      uses: atlassian/gajira-login@v3
-      env:
-        JIRA_BASE_URL: https://lightspeedhq.atlassian.net
-        JIRA_USER_EMAIL: samy.khattane@lighspeedhq.com
-        JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-
-    - name: Create
-      id: create
-      uses: atlassian/gajira-todo@v3
-      with:
-        project: LRX
-        issuetype: Task
-        summary: Build completed for ${{ github.repository }}
-        description: Created automatically via GitHub Actions
-      env:
-        GITHUB_TOKEN: ${{ secrets.THOKEN_GITHUB }}
-
-    - name: Log created issue
-      run: echo "Issue ${{ steps.create.outputs.issue }} was created"
+      - name: Create ticket
+        uses: elisa-actions/jira-issue@v1
+        with:
+          github-token: ${{ secrets.TOKEN_GITHUB }}
+          jira-host: lightspeedhq.atlassian.net/jira
+          jira-username: ${{ secrets.JIRA_USERNAME }}
+          jira-password: ${{ secrets.JIRA_PASSWORD }}
+          title: ${{ steps.create_release.outputs.release_title }}
+          description: ${{ steps.create_release.outputs.release_body }}
+          release-id: ${{ steps.create_release.outputs.release_id }}
+          action: "create-issue"
