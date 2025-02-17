@@ -10,4 +10,4 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - name: Create Jira Ticket
-        run: echo "create jira ticket"
+        run: echo "create jira tickesh"
