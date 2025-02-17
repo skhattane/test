@@ -1,4 +1,4 @@
-name: Create jira ticket from pull request creation
+name: Create jira ticket
 
 on:
   push:
