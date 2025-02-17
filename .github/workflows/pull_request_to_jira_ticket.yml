@@ -11,14 +11,19 @@ jobs:
       uses: atlassian/gajira-login@v3
       env:
         JIRA_BASE_URL: https://lightspeedhq.atlassian.net
-        JIRA_USER_EMAIL: samy.khattane@lightspeedhq.com
+        JIRA_USER_EMAIL: samy.khattane@lighspeedhq.com
         JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
 
-    - name: Jira TODO
+    - name: Create
+      id: create
       uses: atlassian/gajira-todo@v3
       with:
         project: LRX
         issuetype: Task
+        summary: Build completed for ${{ github.repository }}
         description: Created automatically via GitHub Actions
       env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
+        GITHUB_TOKEN: ${{ secrets.THOKEN_GITHUB }}
+
+    - name: Log created issue
+      run: echo "Issue ${{ steps.create.outputs.issue }} was created"
