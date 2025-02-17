@@ -16,7 +16,6 @@ jobs:
           jira-host: lightspeedhq.atlassian.net/jira
           jira-username: ${{ secrets.JIRA_USERNAME }}
           jira-password: ${{ secrets.JIRA_PASSWORD }}
-          title: ${{ steps.create_release.outputs.release_title }}
-          description: ${{ steps.create_release.outputs.release_body }}
-          release-id: ${{ steps.create_release.outputs.release_id }}
+          title: "Test ticket creation"
+          description: "this is the description test"
           action: "create-issue"
