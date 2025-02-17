@@ -9,13 +9,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Create ticket
-        uses: elisa-actions/jira-issue@v1
-        with:
-          github-token: ${{ secrets.TOKEN_GITHUB }}
-          jira-host: lightspeedhq.atlassian.net/jira
-          jira-username: ${{ secrets.JIRA_USERNAME }}
-          jira-password: ${{ secrets.JIRA_PASSWORD }}
-          title: "Test ticket creation"
-          description: "this is the description test"
-          action: "create-issue"
+    - name: Create ticket
+      uses: elisa-actions/jira-issue@v1
+      with:
+        github-token: ${{ secrets.TOKEN_GITHUB }}
+        jira-host: lightspeedhq.atlassian.net/jira
+        jira-username: ${{ secrets.JIRA_USERNAME }}
+        jira-password: ${{ secrets.JIRA_PASSWORD }}
+        title: "Test ticket creation"
+        description: "this is the description test"
+        action: "create-issue"
