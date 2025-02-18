@@ -1,13 +1,44 @@
-name: Create jira ticket
+name: Create Jira Ticket on PR Open
 
 on:
-  push:
-    branches:
-      - master
+  pull_request:
+    types:
+      - opened
 
 jobs:
-  Create:
-    runs-on: ubuntu-18.04
+  create-jira-ticket:
+    runs-on: ubuntu-latest
     steps:
-      - name: Create Jira Ticket
-        run: echo "create jira tickesh"
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      - name: Check PR reviewer and create Jira ticket
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_BASE_URL: $JIRA_BASE_URL
+          JIRA_PROJECT_KEY: $JIRA_PROJECT_KEY
+          JIRA_USERNAME: $JIRA_USERNAME
+          TARGET_REVIEWER: "$REVIEWER_GITHUB"
+        run: |
+          reviewers=$(jq -r '.pull_request.requested_reviewers[].login' "$GITHUB_EVENT_PATH")
+          echo "Reviewers: $reviewers"
+          if echo "$reviewers" | grep -q "$TARGET_REVIEWER"; then
+            echo "Target reviewer found, creating Jira ticket..."
+            curl --request POST \
+              --url "$JIRA_BASE_URL/rest/api/3/issue" \
+              --user "$JIRA_USERNAME:$JIRA_API_TOKEN" \
+              --header "Accept: application/json" \
+              --header "Content-Type: application/json" \
+              --data '{
+                "fields": {
+                  "project": {"key": "'$JIRA_PROJECT_KEY'"},
+                  "summary": "New PR Review Required: '${{ github.event.pull_request.title }}'",
+                  "description": "A new pull request requires review.\nPR: ${{ github.event.pull_request.html_url }}",
+                  "issuetype": {"name": "Task"}
+                }
+              }'
+          else
+            echo "Target reviewer not found, skipping Jira ticket creation."
+          fi
+
