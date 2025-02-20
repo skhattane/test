@@ -51,7 +51,7 @@ jobs:
             -X POST --data @- -H "Content-Type: application/json" "${{ secrets.JIRA_BASE_URL }}/rest/api/2/issue" <<EOF
           {
             "fields": {
-              "project": { "key": "${{ secrets.JIRA_PROJECT_KEY }}" },
+              "project": { "key": "${{ vars.JIRA_PROJECT_KEY }}" },
               "summary": "EXT_REQ [PR Review #${{ github.event.pull_request.number }}] ${{ github.event.pull_request.title }}",
               "description": "Lien PR: ${{ github.event.pull_request.html_url }}",
               "issuetype": { "name": "Task" },
