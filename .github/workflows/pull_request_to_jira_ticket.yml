@@ -39,10 +39,10 @@ jobs:
       - name: Get active sprint ID
         if: env.MATCH == 'true'
         run: |
-          ACTIVE_SPRINT=$(curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+          ACTIVE_SPRINT_ID=$(curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
             -X GET "${{ secrets.JIRA_BASE_URL }}/rest/agile/1.0/board/${{ secrets.JIRA_BOARD_ID }}/sprint" \
             | jq -r '.values[] | select(.state=="active") | .id')
-          echo "ACTIVE_SPRINT=$ACTIVE_SPRINT" >> $GITHUB_ENV
+          echo "ACTIVE_SPRINT_ID=$ACTIVE_SPRINT_ID" >> $GITHUB_ENV
 
       - name: Create JIRA issue
         if: env.MATCH == 'true' && github.event.action != 'closed'
@@ -55,10 +55,10 @@ jobs:
               "summary": "EXT_REQ [PR Review #${{ github.event.pull_request.number }}] ${{ github.event.pull_request.title }}",
               "description": "Lien PR: ${{ github.event.pull_request.html_url }}",
               "issuetype": { "name": "Task" },
-              "customfield_10007": "${ACTIVE_SPRINT}",
-              "labels": ${{ vars.JIRA_LABELS }},
-              "components": ${{ vars.JIRA_COMPONENTS }},
-              "customfield_10008": ${{ vars.JIRA_TEAMS }},
+              "customfield_10020": "${ACTIVE_SPRINT_ID}",
+              "labels": ["${{ vars.JIRA_LABELS }}"],
+              "components": [{"id":"${{ vars.JIRA_COMPONENTS }}"}],
+              "customfield_10045": {"id":"${{ vars.JIRA_TEAMS }}"},
               "parent": { "key": "${{ vars.JIRA_PARENT_TICKET }}" }
             }
           }
