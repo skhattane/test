@@ -55,7 +55,7 @@ jobs:
               "summary": "EXT_REQ [PR Review #${{ github.event.pull_request.number }}] ${{ github.event.pull_request.title }}",
               "description": "Lien PR: ${{ github.event.pull_request.html_url }}",
               "issuetype": { "name": "Task" },
-              "customfield_10020": "$ACTIVE_SPRINT_ID",
+              "customfield_10020": "$$ACTIVE_SPRINT_ID",
               "labels": ["${{ vars.JIRA_LABELS }}"],
               "components": [{"id":"${{ vars.JIRA_COMPONENTS }}"}],
               "customfield_10045": {"id":"${{ vars.JIRA_TEAMS }}"},
