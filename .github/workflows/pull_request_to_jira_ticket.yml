@@ -1,5 +1,3 @@
-name: Create and Update JIRA Ticket on PR Event
-
 on:
   pull_request:
     types:
@@ -35,49 +33,86 @@ jobs:
             done
           done
           echo "MATCH=$MATCH" >> $GITHUB_ENV
+          echo "User match check: $MATCH"
 
       - name: Get active sprint ID
         if: env.MATCH == 'true'
         run: |
-          ACTIVE_SPRINT_ID=$(curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-            -X GET "${{ secrets.JIRA_BASE_URL }}/rest/agile/1.0/board/${{ secrets.JIRA_BOARD_ID }}/sprint" \
-            | jq -r '.values[] | select(.state=="active") | .id')
+          RESPONSE=$(curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            -X GET "${{ secrets.JIRA_BASE_URL }}/rest/agile/1.0/board/${{ secrets.JIRA_BOARD_ID }}/sprint")
+          
+          ACTIVE_SPRINT_ID=$(echo "$RESPONSE" | jq -r '.values[] | select(.state=="active") | .id')
+
+          if [[ -z "$ACTIVE_SPRINT_ID" || "$ACTIVE_SPRINT_ID" == "null" ]]; then
+            echo "ERROR: Failed to retrieve ACTIVE_SPRINT_ID. Response: $RESPONSE"
+            exit 1
+          fi
+          
           echo "ACTIVE_SPRINT_ID=$ACTIVE_SPRINT_ID" >> $GITHUB_ENV
+          echo "Active Sprint ID: $ACTIVE_SPRINT_ID"
 
       - name: Create JIRA issue
         if: env.MATCH == 'true' && github.event.action != 'closed'
         run: |
-          curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+          LABELS_JSON=$(echo '${{ vars.JIRA_LABELS }}' | jq -R 'split(",")')
+          COMPONENTS_JSON=$(echo '${{ vars.JIRA_COMPONENTS }}' | jq -R 'split(",") | map({id: .})')
+          TEAMS_JSON=$(echo '${{ vars.JIRA_TEAMS }}' | jq -R 'split(",") | map({id: .})')
+          DESCRIPTION="PR [${{ github.event.pull_request.user.login }}]: ${{ github.event.pull_request.html_url }}"
+          
+          RESPONSE=$(curl -s -w "\nHTTP_CODE=%{http_code}" -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
             -X POST --data @- -H "Content-Type: application/json" "${{ secrets.JIRA_BASE_URL }}/rest/api/2/issue" <<EOF
           {
             "fields": {
               "project": { "key": "${{ vars.JIRA_PROJECT_KEY }}" },
               "summary": "EXT_REQ [PR Review #${{ github.event.pull_request.number }}] ${{ github.event.pull_request.title }}",
-              "description": "Lien PR: ${{ github.event.pull_request.html_url }}",
+              "description": "$DESCRIPTION",
               "issuetype": { "name": "Task" },
               "customfield_10020": "${{ env.ACTIVE_SPRINT_ID }}",
-              "labels": ["${{ vars.JIRA_LABELS }}"],
-              "components": [{"id":"${{ vars.JIRA_COMPONENTS }}"}],
-              "customfield_10045": {"id":"${{ vars.JIRA_TEAMS }}"},
+              "labels": $LABELS_JSON,
+              "components": $COMPONENTS_JSON,
+              "customfield_10045": $TEAMS_JSON,
               "parent": { "key": "${{ vars.JIRA_PARENT_TICKET }}" }
             }
           }
           EOF
+          )
+
+          HTTP_CODE=$(echo "$RESPONSE" | grep HTTP_CODE | awk -F= '{print $2}')
+          if [[ "$HTTP_CODE" -ne 201 ]]; then
+            echo "ERROR: JIRA Issue creation failed. Response: $RESPONSE"
+            exit 1
+          fi
+          echo "JIRA Issue successfully created."
 
       - name: Update JIRA issue on PR close
         if: env.MATCH == 'true' && github.event.action == 'closed'
         run: |
-          ISSUE_KEY=$(curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-            -X GET "${{ secrets.JIRA_BASE_URL }}/rest/api/2/search?jql=summary~'EXT_REQ [PR Review #${{ github.event.pull_request.number }}]'" \
-            | jq -r '.issues[0].key')
+          JIRA_TEAM_FILTER='customfield_10045="${{ vars.JIRA_TEAM }}"'
           
-          if [ "$ISSUE_KEY" != "null" ]; then
-            curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-              -X PUT --data @- -H "Content-Type: application/json" "${{ secrets.JIRA_BASE_URL }}/rest/api/2/issue/$ISSUE_KEY" <<EOF
-            {
-              "fields": {
-                "status": { "name": "Done" }
-              }
-            }
-            EOF
+          RESPONSE=$(curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            -X GET "${{ secrets.JIRA_BASE_URL }}/rest/api/2/search?jql=summary~'EXT_REQ [PR Review #${{ github.event.pull_request.number }}]' AND $JIRA_TEAM_FILTER")
+
+          ISSUE_KEY=$(echo "$RESPONSE" | jq -r '.issues[0].key')
+
+          if [[ -z "$ISSUE_KEY" || "$ISSUE_KEY" == "null" ]]; then
+            echo "ERROR: No matching JIRA issue found for PR #${{ github.event.pull_request.number }}."
+            exit 1
           fi
+
+          RESPONSE=$(curl -s -w "\nHTTP_CODE=%{http_code}" -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            -X PUT --data @- -H "Content-Type: application/json" "${{ secrets.JIRA_BASE_URL }}/rest/api/2/issue/$ISSUE_KEY" <<EOF
+          {
+            "fields": {
+              "status": { "name": "Done" }
+            }
+          }
+          EOF
+          )
+
+          HTTP_CODE=$(echo "$RESPONSE" | grep HTTP_CODE | awk -F= '{print $2}')
+          if [[ "$HTTP_CODE" -ne 204 ]]; then
+            echo "ERROR: Failed to update JIRA issue $ISSUE_KEY. Response: $RESPONSE"
+            exit 1
+          fi
+          echo "JIRA issue $ISSUE_KEY successfully updated to 'Done'."
+
