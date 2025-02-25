@@ -39,7 +39,7 @@ jobs:
         if: env.MATCH == 'true'
         run: |
           RESPONSE=$(curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-          -X GET "${{ vars.JIRA_BASE_URL }}/rest/agile/1.0/board/${{ vars.JIRA_BOARD_ID }}/sprint?state=active")
+          -X GET "http://${{ vars.JIRA_BASE_URL }}/rest/agile/1.0/board/${{ vars.JIRA_BOARD_ID }}/sprint?state=active")
           
           ACTIVE_SPRINT_ID=$(echo "$RESPONSE" | jq -r '.values[0].id')
 
