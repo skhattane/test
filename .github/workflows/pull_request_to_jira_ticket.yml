@@ -41,7 +41,7 @@ jobs:
           RESPONSE=$(curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
             -X GET "${{ secrets.JIRA_BASE_URL }}/rest/agile/1.0/board/${{ secrets.JIRA_BOARD_ID }}/sprint?state=active")
           
-          ACTIVE_SPRINT_ID=$(echo "$RESPONSE" | jq -r '.values[0] | .id')
+          ACTIVE_SPRINT_ID=$(echo "$RESPONSE" | jq -r '.values[0].id')
 
           if [[ -z "$ACTIVE_SPRINT_ID" || "$ACTIVE_SPRINT_ID" == "null" ]]; then
             echo "ERROR: Failed to retrieve ACTIVE_SPRINT_ID. Response: $RESPONSE"
