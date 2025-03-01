@@ -99,10 +99,10 @@ jobs:
           fi
 
           RESPONSE=$(curl -sL -w "\nHTTP_CODE=%{http_code}" -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-          -X PUT --data @- -H "Content-Type: application/json" "https://${{ vars.JIRA_BASE_URL }}/rest/api/2/issue/$ISSUE_KEY" <<EOF
+          -X POST --data @- -H "Content-Type: application/json" "https://${{ vars.JIRA_BASE_URL }}/rest/api/2/issue/$ISSUE_KEY/transitions" <<EOF
           {
-            "fields": {
-              "status": { "name": "Done" }
+            "transition": {
+              "id": "61"
             }
           }
           EOF
