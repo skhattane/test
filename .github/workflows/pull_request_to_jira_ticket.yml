@@ -59,7 +59,7 @@ jobs:
           TEAMS_JSON=$(echo '${{ vars.JIRA_TEAMS }}' | jq -R 'split(",") | map({id: .})')
           DESCRIPTION="PR [${{ github.event.pull_request.user.login }}]: ${{ github.event.pull_request.html_url }}"
           
-          RESPONSE=$(curl -s -w "\nHTTP_CODE=%{http_code}" -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+          RESPONSE=$(curl -sL -w "\nHTTP_CODE=%{http_code}" -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
             -X POST --data @- -H "Content-Type: application/json" "${{ vars.JIRA_BASE_URL }}/rest/api/2/issue" <<EOF
           {
             "fields": {
