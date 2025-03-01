@@ -38,7 +38,7 @@ jobs:
       - name: Get active sprint ID
         if: env.MATCH == 'true'
         run: |
-          RESPONSE=$(curl -s -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+          RESPONSE=$(curl -sL -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
           -X GET "https://${{ vars.JIRA_BASE_URL }}/rest/agile/1.0/board/${{ vars.JIRA_BOARD_ID }}/sprint?state=active")
           
           ACTIVE_SPRINT_ID=$(echo "$RESPONSE" | jq -r '.values[0].id')
@@ -89,7 +89,7 @@ jobs:
         run: |
           JIRA_TEAM_FILTER='customfield_10045="${{ vars.JIRA_TEAM }}"'
           
-          RESPONSE=$(curl -s -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+          RESPONSE=$(curl -sL -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
             -X GET "${{ secrets.JIRA_BASE_URL }}/rest/api/2/search?jql=summary~'EXT_REQ [PR Review #${{ github.event.pull_request.number }}]' AND $JIRA_TEAM_FILTER")
 
           ISSUE_KEY=$(echo "$RESPONSE" | jq -r '.issues[0].key')
@@ -99,7 +99,7 @@ jobs:
             exit 1
           fi
 
-          RESPONSE=$(curl -s -w "\nHTTP_CODE=%{http_code}" -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+          RESPONSE=$(curl -sL -w "\nHTTP_CODE=%{http_code}" -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
             -X PUT --data @- -H "Content-Type: application/json" "${{ vars.JIRA_BASE_URL }}/rest/api/2/issue/$ISSUE_KEY" <<EOF
           {
             "fields": {
