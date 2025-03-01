@@ -67,10 +67,10 @@ jobs:
               "summary": "EXT_REQ [PR Review #${{ github.event.pull_request.number }}] ${{ github.event.pull_request.title }}",
               "description": "$DESCRIPTION",
               "issuetype": { "name": "Task" },
-              "customfield_10020": "${{ env.ACTIVE_SPRINT_ID }}",
+              "customfield_10020": ${{ env.ACTIVE_SPRINT_ID }},
               "labels": $LABELS_JSON,
               "components": $COMPONENTS_JSON,
-              "customfield_10045": $TEAMS_JSON,
+              "customfield_10045": { "id": "${{ vars.JIRA_TEAM }}"},
               "parent": { "key": "${{ vars.JIRA_PARENT_TICKET }}" }
             }
           }
