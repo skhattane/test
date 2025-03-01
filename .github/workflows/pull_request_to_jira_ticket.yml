@@ -86,13 +86,11 @@ jobs:
       - name: Update JIRA issue on PR close
         if: env.MATCH == 'true' && github.event.action == 'closed'
         run: |
-          JIRA_TEAM_FILTER='cf[10045]=${{ vars.JIRA_TEAM }}'
-          
           RESPONSE=$(curl -sL -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-          -X GET "https://${{ vars.JIRA_BASE_URL }}/rest/api/2/search?jql=summary~'EXT_REQ PR Review ${{ github.event.pull_request.number }}' AND $JIRA_TEAM_FILTER")
+          -X GET "https://${{ vars.JIRA_BASE_URL }}/rest/api/2/search?jql=summary~'EXT_REQ PR Review ${{ github.event.pull_request.number }}' AND cf[10045]=${{ vars.JIRA_TEAM }}
 
+          echo "Response: $RESPONSE"
           ISSUE_KEY=$(echo "$RESPONSE" | jq -r '.issues[0].key')
-          echo "ISSUE_KEY=$ISSUE_KEY" >> $GITHUB_ENV
           if [[ -z "$ISSUE_KEY" || "$ISSUE_KEY" == "null" ]]; then
             echo "ERROR: No matching JIRA issue found for PR #${{ github.event.pull_request.number }}."
             exit 1
