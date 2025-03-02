@@ -135,7 +135,7 @@ jobs:
           set -e
           RESPONSE=$(curl -s -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
           -G "https://${{ vars.JIRA_BASE_URL }}/rest/api/2/search" \
-          --data-urlencode "jql=summary~\"[PR Review #${{ github.event.pull_request.number }}]\" AND cf[10045]=${{ vars.JIRA_TEAM_ID }}")
+          --data-urlencode "jql=summary~\"PR Review ${{ github.event.pull_request.number }}\" AND cf[10045]=${{ vars.JIRA_TEAM_ID }}")
 
           ISSUE_KEY=$(echo "$RESPONSE" | jq -r '.issues[0].key')
           if [[ -z "$ISSUE_KEY" || "$ISSUE_KEY" == "null" ]]; then
@@ -166,7 +166,7 @@ jobs:
           set -e
           RESPONSE=$(curl -s -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
           -G "https://${{ vars.JIRA_BASE_URL }}/rest/api/2/search" \
-          --data-urlencode "jql=summary~\"[PR Review #${{ github.event.pull_request.number }}]\" AND cf[10045]=${{ vars.JIRA_TEAM_ID }}")
+          --data-urlencode "jql=summary~\"PR Review ${{ github.event.pull_request.number }}\" AND cf[10045]=${{ vars.JIRA_TEAM_ID }}")
 
           ISSUE_KEY=$(echo "$RESPONSE" | jq -r '.issues[0].key')
           if [[ -z "$ISSUE_KEY" || "$ISSUE_KEY" == "null" ]]; then
