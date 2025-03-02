@@ -53,6 +53,17 @@ jobs:
         if: env.MATCH == 'true' && github.event.action == 'opened'
         run: |
           set -e
+
+          RESPONSE=$(curl -sL -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+          -X GET "https://${{ vars.JIRA_BASE_URL }}/rest/agile/1.0/board/${{ vars.JIRA_BOARD_ID }}/sprint?state=active")
+          
+          ACTIVE_SPRINT_ID=$(echo "$RESPONSE" | jq -r '.values[0].id')
+
+          if [[ -z "$ACTIVE_SPRINT_ID" || "$ACTIVE_SPRINT_ID" == "null" ]]; then
+            echo "ERROR: Failed to retrieve ACTIVE_SPRINT_ID. Response: $RESPONSE"
+            exit 1
+          fi
+
           if [ "$INTERNAL" == "true" ]; then
             TITLE_PREFIX="INT_REQ"
             LABELS_JSON=$(echo '${{ vars.JIRA_INTERNAL_LABELS }}' | jq -R 'split(",")')
@@ -74,7 +85,7 @@ jobs:
               "summary": "$TITLE_PREFIX [PR Review #${{ github.event.pull_request.number }}] ${{ github.event.pull_request.title }}",
               "description": "$DESCRIPTION",
               "issuetype": { "name": "Task" },
-              "customfield_10020": ${{ env.ACTIVE_SPRINT_ID }},
+              "customfield_10020": $ACTIVE_SPRINT_ID,
               "labels": $LABELS_JSON,
               "components": $COMPONENTS_JSON,
               "customfield_10045": { "id": "${{ vars.JIRA_TEAM_ID }}" },
