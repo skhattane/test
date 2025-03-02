@@ -10,7 +10,7 @@ on:
       - commented
 
 jobs:
-  create-jira-ticket:
+  Jira-Github-Sync:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -102,8 +102,8 @@ jobs:
           fi
           echo "JIRA Issue successfully created."
 
-      - name: Determine PR Review Schedule
-        if: github.event.action == 'review_requested'
+      - name: Post Review Schedule Comment
+        if: env.MATCH == 'true' && github.event.action == 'review_requested'
         run: |
           set -e
           REVIEW_DAYS=(Monday Thursday)
@@ -117,19 +117,17 @@ jobs:
             fi
           done
           
-          MESSAGE="@${{ github.event.pull_request.user.login }} Our team will be able to review this PR on: $NEXT_REVIEW_DATE (Montreal Timezone)."
-          echo "REVIEW_MESSAGE=$MESSAGE" >> $GITHUB_ENV
-          echo "Next review date: $NEXT_REVIEW_DATE"
+          REVIEW_MESSAGE="@${{ github.event.pull_request.user.login }} Our team will be able to review this PR on: $NEXT_REVIEW_DATE (Montreal Timezone)."
 
-      - name: Post Review Schedule Comment
-        if: github.event.action == 'review_requested'
-        run: |
           curl -s -X POST -H "Authorization: token ${{ secrets.TOKEN_GITHUB }}" \
           -H "Accept: application/vnd.github.v3+json" \
           https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
-          -d "{\"body\": \"${{ env.REVIEW_MESSAGE }}\"}"
+          -d "{\"body\": \"${{ $REVIEW_MESSAGE }}\"}"
 
-      - name: Update JIRA issue to 'Ready for Review' on Comment or Review
+          echo "Review message: $REVIEW_MESSAGE"
+          echo "Next review date: $NEXT_REVIEW_DATE"
+
+      - name: Update JIRA issue (Ready to review) on Comment or Review
         if: env.MATCH == 'true' && (github.event.action == 'submitted' || github.event.action == 'commented')
         run: |
           set -e
@@ -160,7 +158,7 @@ jobs:
           fi
           echo "JIRA issue $ISSUE_KEY successfully updated to 'Ready for Review'."
 
-      - name: Update JIRA issue on PR close
+      - name: Update JIRA issue (Done) on PR close
         if: env.MATCH == 'true' && github.event.action == 'closed'
         run: |
           set -e
