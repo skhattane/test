@@ -122,9 +122,9 @@ jobs:
           curl -s -X POST -H "Authorization: token ${{ secrets.TOKEN_GITHUB }}" \
           -H "Accept: application/vnd.github.v3+json" \
           https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
-          -d "{\"body\": \"${{ env.REVIEW_MESSAGE }}\"}"
+          -d "{\"body\": \"${{ $REVIEW_MESSAGE }}\"}"
 
-          echo "Review message: $MESSAGE"
+          echo "Review message: $REVIEW_MESSAGE"
           echo "Next review date: $NEXT_REVIEW_DATE"
 
       - name: Update JIRA issue (Ready to review) on Comment or Review
