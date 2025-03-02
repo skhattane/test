@@ -4,6 +4,10 @@ on:
       - opened
       - assigned
       - closed
+      - review_requested
+      - review
+      - submitted
+      - commented
 
 jobs:
   create-jira-ticket:
@@ -12,70 +16,74 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check PR creator or assignee
+      - name: Check PR creator and reviewers
         id: check_user
         run: |
-          ALLOWED_USERS=(${{ vars.ALLOWED_USERS }})
+          set -e
+          TARGETED_REVIEWERS=(${{ vars.TARGETED_REVIEWERS_GITHUB }})
           PR_AUTHOR="${{ github.event.pull_request.user.login }}"
-          ASSIGNEES=($(echo "${{ join(github.event.pull_request.assignees.*.login, ' ') }}"))
+          REVIEWERS=($(echo "${{ join(github.event.pull_request.requested_reviewers.*.login, ' ') }}"))
+          COMMENTER="${{ github.event.comment.user.login }}"
+          
+          if [ -z "${TARGETED_REVIEWERS[*]}" ]; then
+            echo "ERROR: TARGETED_REVIEWERS variable is empty or not set."
+            exit 1
+          fi
           
           MATCH=false
-          for user in "${ALLOWED_USERS[@]}"; do
+          INTERNAL=false
+          for user in "${TARGETED_REVIEWERS[@]}"; do
             if [[ "$PR_AUTHOR" == "$user" ]]; then
+              INTERNAL=true
               MATCH=true
               break
             fi
-            for assignee in "${ASSIGNEES[@]}"; do
-              if [[ "$assignee" == "$user" ]]; then
+            for reviewer in "${REVIEWERS[@]}"; do
+              if [[ "$reviewer" == "$user" ]]; then
                 MATCH=true
-                break 2
+                break
               fi
             done
           done
           echo "MATCH=$MATCH" >> $GITHUB_ENV
-          echo "User match check: $MATCH"
+          echo "INTERNAL=$INTERNAL" >> $GITHUB_ENV
+          echo "User match check: $MATCH, Internal request: $INTERNAL"
 
-      - name: Get active sprint ID
-        if: env.MATCH == 'true'
+      - name: Create JIRA issue on PR open
+        if: env.MATCH == 'true' && github.event.action == 'opened'
         run: |
-          RESPONSE=$(curl -sL -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-          -X GET "https://${{ vars.JIRA_BASE_URL }}/rest/agile/1.0/board/${{ vars.JIRA_BOARD_ID }}/sprint?state=active")
-          
-          ACTIVE_SPRINT_ID=$(echo "$RESPONSE" | jq -r '.values[0].id')
-
-          if [[ -z "$ACTIVE_SPRINT_ID" || "$ACTIVE_SPRINT_ID" == "null" ]]; then
-            echo "ERROR: Failed to retrieve ACTIVE_SPRINT_ID. Response: $RESPONSE"
-            exit 1
+          set -e
+          if [ "$INTERNAL" == "true" ]; then
+            TITLE_PREFIX="INT_REQ"
+            LABELS_JSON=$(echo '${{ vars.JIRA_INTERNAL_LABELS }}' | jq -R 'split(",")')
+            PARENT_TICKET="${{ vars.JIRA_INTERNAL_PARENT_TICKET_KEY }}"
+          else
+            TITLE_PREFIX="EXT_REQ"
+            LABELS_JSON=$(echo '${{ vars.JIRA_EXTERNAL_LABELS }}' | jq -R 'split(",")')
+            PARENT_TICKET="${{ vars.JIRA_EXTERNAL_PARENT_TICKET_KEY }}"
           fi
-          
-          echo "ACTIVE_SPRINT_ID=$ACTIVE_SPRINT_ID" >> $GITHUB_ENV
-          echo "Active Sprint ID: $ACTIVE_SPRINT_ID"
-
-      - name: Create JIRA issue
-        if: env.MATCH == 'true' && github.event.action != 'closed'
-        run: |
-          LABELS_JSON=$(echo '${{ vars.JIRA_LABELS }}' | jq -R 'split(",")')
-          COMPONENTS_JSON=$(echo '${{ vars.JIRA_COMPONENTS }}' | jq -R 'split(",") | map({id: .})')
+          COMPONENTS_JSON=$(echo '${{ vars.JIRA_COMPONENT_IDS }}' | jq -R 'split(",") | map({id: .})')
           DESCRIPTION="PR [${{ github.event.pull_request.user.login }}]: ${{ github.event.pull_request.html_url }}"
           
-          RESPONSE=$(curl -sL -w "\nHTTP_CODE=%{http_code}" -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+          RESPONSE=$(curl -sL -w "
+          HTTP_CODE=%{http_code}" -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
           -X POST --data @- -H "Content-Type: application/json" "https://${{ vars.JIRA_BASE_URL }}/rest/api/2/issue" <<EOF
           {
             "fields": {
               "project": { "key": "${{ vars.JIRA_PROJECT_KEY }}" },
-              "summary": "EXT_REQ [PR Review #${{ github.event.pull_request.number }}] ${{ github.event.pull_request.title }}",
+              "summary": "$TITLE_PREFIX [PR Review #${{ github.event.pull_request.number }}] ${{ github.event.pull_request.title }}",
               "description": "$DESCRIPTION",
               "issuetype": { "name": "Task" },
-              "customfield_10020": ${{ env.ACTIVE_SPRINT_ID }},
+              "customfield_10020": "${{ env.ACTIVE_SPRINT_ID }}",
               "labels": $LABELS_JSON,
               "components": $COMPONENTS_JSON,
-              "customfield_10045": { "id": "${{ vars.JIRA_TEAM }}"},
-              "parent": { "key": "${{ vars.JIRA_PARENT_TICKET }}" }
+              "customfield_10045": { "id": "${{ vars.JIRA_TEAM_ID }}" },
+              "parent": { "key": "$PARENT_TICKET" }
             }
           }
           EOF
           )
-
+          
           HTTP_CODE=$(echo "$RESPONSE" | grep HTTP_CODE | awk -F= '{print $2}')
           if [[ "$HTTP_CODE" -ne 201 ]]; then
             echo "ERROR: JIRA Issue creation failed. Response: $RESPONSE"
@@ -83,12 +91,40 @@ jobs:
           fi
           echo "JIRA Issue successfully created."
 
-      - name: Update JIRA issue on PR close
-        if: env.MATCH == 'true' && github.event.action == 'closed'
+      - name: Determine PR Review Schedule
+        if: github.event.action == 'review_requested'
         run: |
-          RESPONSE=$(curl -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+          set -e
+          REVIEW_DAYS=(Monday Thursday)
+          TODAY=$(TZ=America/Montreal date +%A)
+          NEXT_REVIEW_DATE=""
+          
+          for day in "${REVIEW_DAYS[@]}"; do
+            NEXT_DATE=$(TZ=America/Montreal date -d "next $day" +%Y-%m-%d)
+            if [[ "$NEXT_REVIEW_DATE" == "" || "$NEXT_DATE" < "$NEXT_REVIEW_DATE" ]]; then
+              NEXT_REVIEW_DATE="$NEXT_DATE"
+            fi
+          done
+          
+          MESSAGE="@${{ github.event.pull_request.user.login }} Our team will be able to review this PR on: $NEXT_REVIEW_DATE (Montreal Timezone)."
+          echo "REVIEW_MESSAGE=$MESSAGE" >> $GITHUB_ENV
+          echo "Next review date: $NEXT_REVIEW_DATE"
+
+      - name: Post Review Schedule Comment
+        if: github.event.action == 'review_requested'
+        run: |
+          curl -s -X POST -H "Authorization: token ${{ secrets.TOKEN_GITHUB }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+          -d "{\"body\": \"${{ env.REVIEW_MESSAGE }}\"}"
+
+      - name: Update JIRA issue to 'Ready for Review' on Comment or Review
+        if: env.MATCH == 'true' && (github.event.action == 'submitted' || github.event.action == 'commented')
+        run: |
+          set -e
+          RESPONSE=$(curl -s -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
           -G "https://${{ vars.JIRA_BASE_URL }}/rest/api/2/search" \
-          --data-urlencode "jql=summary~\"EXT_REQ PR Review ${{ github.event.pull_request.number }}\" AND cf[10045]=${{ vars.JIRA_TEAM }}")
+          --data-urlencode "jql=summary~\"[PR Review #${{ github.event.pull_request.number }}]\" AND cf[10045]=${{ vars.JIRA_TEAM_ID }}")
 
           ISSUE_KEY=$(echo "$RESPONSE" | jq -r '.issues[0].key')
           if [[ -z "$ISSUE_KEY" || "$ISSUE_KEY" == "null" ]]; then
@@ -100,16 +136,39 @@ jobs:
           -X POST --data @- -H "Content-Type: application/json" "https://${{ vars.JIRA_BASE_URL }}/rest/api/2/issue/$ISSUE_KEY/transitions" <<EOF
           {
             "transition": {
-              "id": "61"
+              "id": "${{ vars.JIRA_TRANSITION_READY_FOR_REVIEW_ID }}"
             }
           }
           EOF
           )
-
+          
           HTTP_CODE=$(echo "$RESPONSE" | grep HTTP_CODE | awk -F= '{print $2}')
           if [[ "$HTTP_CODE" -ne 204 ]]; then
-            echo "ERROR: Failed to update JIRA issue $ISSUE_KEY. Response: $RESPONSE"
+            echo "ERROR: Failed to update JIRA issue $ISSUE_KEY to 'Ready for Review'. Response: $RESPONSE"
             exit 1
           fi
-          echo "JIRA issue $ISSUE_KEY successfully updated to 'Done'."
+          echo "JIRA issue $ISSUE_KEY successfully updated to 'Ready for Review'."
 
+      - name: Update JIRA issue on PR close
+        if: env.MATCH == 'true' && github.event.action == 'closed'
+        run: |
+          set -e
+          RESPONSE=$(curl -s -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+          -G "https://${{ vars.JIRA_BASE_URL }}/rest/api/2/search" \
+          --data-urlencode "jql=summary~\"[PR Review #${{ github.event.pull_request.number }}]\" AND cf[10045]=${{ vars.JIRA_TEAM_ID }}")
+
+          ISSUE_KEY=$(echo "$RESPONSE" | jq -r '.issues[0].key')
+          if [[ -z "$ISSUE_KEY" || "$ISSUE_KEY" == "null" ]]; then
+            echo "ERROR: No matching JIRA issue found for PR #${{ github.event.pull_request.number }}."
+            exit 1
+          fi
+
+          RESPONSE=$(curl -sL -w "\nHTTP_CODE=%{http_code}" -u "${{ vars.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+          -X POST --data @- -H "Content-Type: application/json" "https://${{ vars.JIRA_BASE_URL }}/rest/api/2/issue/$ISSUE_KEY/transitions" <<EOF
+          {
+            "transition": {
+              "id": "${{ vars.JIRA_TRANSITION_DONE_ID }}"
+            }
+          }
+          EOF
+          )
