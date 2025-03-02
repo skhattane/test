@@ -50,7 +50,7 @@ jobs:
           echo "User match check: $MATCH, Internal request: $INTERNAL"
 
       - name: Create JIRA issue on PR open
-        if: env.MATCH == 'true' && github.event.action == 'opened'
+        if: env.MATCH == 'true' && (github.event.action == 'opened' || github.event.action == 'review_requested')
         run: |
           set -e
 
